@@ -1,0 +1,6 @@
+Base path: /home/roberta/Unity-2018.2.7f1/Editor/Data
+Cmd: initializeCompiler
+Cmd: compileComputeKernel
+  api=18 insize=4405 outsize=4873 ok=1
+
+Quitting shader compiler process
