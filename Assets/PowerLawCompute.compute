@@ -1,0 +1,33 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+struct Particle
+{
+	float3 pos;
+	float3 vel;
+	float3 f;
+	float3 color;
+	float d;
+	float p;
+};
+
+RWStructuredBuffer<Particle> cloud;
+uint _npts; // set via global shader var! gag. Not in dispatch params??
+
+
+
+[numthreads(64,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	Particle p = cloud[id.x];
+	float3 a = 0;
+	float3 d = 0;
+	for (uint j = 0; j < id.x; ++j) {
+		d = (cloud[j].pos - p.pos);
+		a += d * length(d);
+	}
+	for (uint k = id.x + 1; k < _npts; ++k) {
+		d = (cloud[k].pos - p.pos);
+		a += d * length(d);
+	}
+	cloud[id.x].vel += a * 0.00000001;
+}

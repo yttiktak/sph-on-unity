@@ -1,4 +1,4 @@
 sceneSetups:
-- path: Assets/Scenes/powerLaw.unity
+- path: Assets/WinGravity.unity
   isLoaded: 1
   isActive: 1

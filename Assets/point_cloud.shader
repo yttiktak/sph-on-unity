@@ -51,7 +51,7 @@
 				Particle p = cloud[id];
 				o.vertex = UnityObjectToClipPos(p.pos);
 				cloud[id].pos = cloud[id].pos + p.vel*0.1;
-				// o.color = abs(cloud[id].vel * 100);
+				o.color = abs(cloud[id].vel * 100);
 				return o;
 			}
 			
