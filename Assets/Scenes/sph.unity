@@ -210,6 +210,11 @@ MonoBehaviour:
   methods: 1
   material: {fileID: 2100000, guid: cd81ed191b0b2499aa11983c907e8eb3, type: 2}
   cloudCompute: {fileID: 7200000, guid: 021794b0e5ecf46969b907cbf967a284, type: 3}
+  particleMass: 1
+  particleRestDensity: 50
+  particleStiffness: 200000
+  particleViscosity: 30000
+  smoothingLength: 3
 --- !u!20 &534669904
 Camera:
   m_ObjectHideFlags: 0
@@ -232,7 +237,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 117
+  field of view: 74
   orthographic: 0
   orthographic size: 5
   m_Depth: -1

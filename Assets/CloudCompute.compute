@@ -1,10 +1,15 @@
 ﻿#pragma kernel Gravity
+#pragma kernel DensityPressure
+#pragma kernel PressureForce
+#pragma kernel Integrate
+#pragma kernel Power
+#pragma kernel CSMain
 
 struct Particle
 {
 	float3 pos;
 	float3 vel;
-	float3 f;
+	float3 force;
 	float3 color;
 	float d;
 	float p;
@@ -13,6 +18,18 @@ struct Particle
 RWStructuredBuffer<Particle> cloud;
 uint _npts; // set! gag. Not in dispatch params??
 
+// some globals
+float particleRadius;
+float particleRestDensity;
+float particleMass;
+float smoothingLength;
+float smoothingLength3; // cubed
+float smoothingLength6; // pow(sml,6)
+float particleStiffness;
+float particleViscosity;
+float time_step; 
+
+#define PI_FLOAT 3.14159265358979
 
 [numthreads(1024, 1, 1)]
 void Gravity(uint3 id : SV_DispatchThreadID)
@@ -31,46 +48,52 @@ void Gravity(uint3 id : SV_DispatchThreadID)
 		l = length(d);
 		a +=  normalize(d) / (l*l);
 	}
-	cloud[id.x].f = a;
+	cloud[id.x].force = a;
 	cloud[id.x].vel += a * 0.001;
 };
 
-#pragma kernel DensityPressure
 
-#define PI_FLOAT 3.1415926535898
-#define  PARTICLE_RADIUS 0.5
-#define  PARTICLE_RESTING_DENSITY 1
-#define  PARTICLE_MASS 1
-#define  SMOOTHING_LENGTH 0.5
-#define  PARTICLE_STIFFNESS 2000
-#define  PARTICLE_VISCOSITY 3000
+
 /*** STARTED FROM CODE BY:
 // https://github.com/multiprecision/sph_opengl/tree/master/shader
-// Copyright (c) 2017-2018, Samuel Ivan Gunadi
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
-//
-//#version 460
+// 
 // much mdifications, changes pending to go into 3D and follow papers such as:
 // Daniel J. Price
 // Smoothed Particle Hydrodynamics and Magnetohydrodynamics
 ***/ 
+
+// Price, eq. # 6
+float CubicSpline(float q) {
+	float result;
+	if (q < 1) {
+		result = 0.25 * pow((2.0-q),3) - pow((1.0-q),3);
+	} else {
+	 	if (q<2) {
+			result = 0.25 * pow((2.0-q),3);
+		} else {
+			result = 0;
+		}
+	}
+	return result / ( smoothingLength3 * PI_FLOAT);
+}
+
+// Price, eq # 85
+float GradCubicSpline(float q) {
+	float result;
+	if (q < 0.666) {
+		result = 1; 
+	} else {
+	 	if (q<1) {
+			result = -3.0*q + 2.25*pow(q,2);
+		} else {
+			result = 0.75 * pow((2.0 - q),2);
+		}
+		if (q > 2) {
+		    result = 0;
+		}
+	}
+	return result / ( PI_FLOAT);
+}
 
 [numthreads(1024, 1, 1)]
 void DensityPressure(uint3 id : SV_DispatchThreadID)
@@ -83,52 +106,76 @@ void DensityPressure(uint3 id : SV_DispatchThreadID)
 	for (uint j = 0; j < _npts; ++j) {
 		d = (cloud[j].pos - p.pos);
 		r = distance(cloud[j].pos.xyz,p.pos.xyz);
-		if (r < SMOOTHING_LENGTH)
+		if (r < smoothingLength)
 		{
-			dsum += PARTICLE_MASS * 315.0 * pow(SMOOTHING_LENGTH * SMOOTHING_LENGTH - r * r, 3) / (64.0 * PI_FLOAT * pow(SMOOTHING_LENGTH, 9));
+			dsum += particleMass * CubicSpline(r/particleRadius);
 		}
 	}
 	cloud[id.x].d = dsum;
-	cloud[id.x].p = max(PARTICLE_STIFFNESS * (dsum - PARTICLE_RESTING_DENSITY), 0.f);
+	cloud[id.x].p = max(particleStiffness * (dsum - particleRestDensity), 0.f);
 };
-
-#pragma kernel PressureForce
 
 [numthreads(1024, 1, 1)]
 void PressureForce(uint3 id : SV_DispatchThreadID)
 {
 	float3 d;
 	float r;
-	float3 p_f = 0;
-	float3 v_f = 0;
+	float factor1;
+	float3 p_fs = 0;
+	float3 v_fs = 0;
+
+	factor1 = 45.0 / (PI_FLOAT * smoothingLength6);
 	Particle p = cloud[id.x];
 	for (uint j = 0; j < id.x; ++j) {
 		d = (cloud[j].pos - p.pos);
 		r = length(d);
-		if (r<SMOOTHING_LENGTH)
+		if (r<smoothingLength)
 		{
-			p_f += PARTICLE_MASS * (cloud[id.x].p + cloud[j].p) / (2.0 - cloud[j].d)* 
-			45.0 / (PI_FLOAT * pow(SMOOTHING_LENGTH,6))*pow(SMOOTHING_LENGTH - r, 2) * normalize(d);
-			v_f += PARTICLE_MASS * (cloud[j].vel - cloud[id.x].vel)/cloud[j].d * 
-			45.0 / (PI_FLOAT * pow(SMOOTHING_LENGTH,6)) * (SMOOTHING_LENGTH -r);
+			p_fs += (p.p + cloud[j].p) / (2.0 - cloud[j].d) *  pow(smoothingLength - r, 2) * normalize(d);
+			v_fs += (cloud[j].vel - p.vel)/cloud[j].d *  (smoothingLength -r);
 		}
 	}
 	for (uint k = id.x+1; k < _npts; ++k) {
 		d = (cloud[k].pos - p.pos);
 		r = length(d);
-		if (r<SMOOTHING_LENGTH)
+		if (r<smoothingLength)
 		{
-			p_f += PARTICLE_MASS * (cloud[id.x].p + cloud[j].p) / (2.0 - cloud[j].d)* 
-			45.0 / (PI_FLOAT * pow(SMOOTHING_LENGTH,6))*pow(SMOOTHING_LENGTH - r, 2) * normalize(d);
-			v_f += PARTICLE_MASS * (cloud[j].vel - cloud[id.x].vel)/cloud[j].d * 
-			45.0 / (PI_FLOAT * pow(SMOOTHING_LENGTH,6)) * (SMOOTHING_LENGTH -r);
+			p_fs += (p.p + cloud[j].p) / (2.0 - cloud[j].d)* factor1 * pow(smoothingLength - r, 2) * normalize(d);
+			v_fs += (cloud[j].vel - p.vel)/cloud[j].d * factor1 * (smoothingLength -r);
 		}
 	}
-	v_f *= PARTICLE_VISCOSITY;
-    cloud[id.x].f = (p_f + v_f); // external force from gravity not in place yet
+	v_fs *= particleViscosity;
+    cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs); // external force from gravity not in place yet
 }
 
-#pragma kernel CSMain
+
+[numthreads(1024, 1, 1)]
+void Integrate(uint3 id : SV_DispatchThreadID)
+{
+	float3 a = cloud[id.x].force / cloud[id.x].d;
+	cloud[id.x].vel += a * time_step;
+	cloud[id.x].pos += cloud[id.x].vel * time_step;
+};
+
+
+[numthreads(1024, 1, 1)]
+void Power(uint3 id : SV_DispatchThreadID)
+{
+	Particle p = cloud[id.x];
+	float3 a = 0;
+	float3 d = 0;
+	for (uint j = 0; j < id.x; ++j) {
+		d = (cloud[j].pos - p.pos);
+		a +=  d * length(d);
+	}
+	for (uint k = id.x+1; k < _npts; ++k) {
+		d = (cloud[k].pos - p.pos);
+		a +=  d * length(d);
+	}
+	cloud[id.x].force = a * 0.001;
+};
+
+
 
 [numthreads(1024, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)

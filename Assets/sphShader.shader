@@ -52,9 +52,8 @@
 				Particle p = cloud[id];
 				o.vertex = UnityObjectToClipPos(p.pos);
 
-				float3 accel = p.f / p.d;
-				float3 v_n = p.vel + 1 * accel;
-				float3 p_n = p.pos + 1 * v_n;
+				float3 v_n = p.vel;
+				float3 p_n = p.pos;
 				/**
 				if (p_n.x < -100) { 
 					p_n.x = -100;
