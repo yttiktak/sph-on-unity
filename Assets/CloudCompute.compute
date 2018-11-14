@@ -56,6 +56,8 @@ void Gravity(uint3 id : SV_DispatchThreadID)
 
 /*** STARTED FROM CODE BY:
 // https://github.com/multiprecision/sph_opengl/tree/master/shader
+// also see:
+// rlguy.com/sphfluidsim/
 // 
 // much mdifications, changes pending to go into 3D and follow papers such as:
 // Daniel J. Price
