@@ -207,14 +207,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb183dff9c66f4aa8ba98243f8abb69d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  methods: 1
+  methods: 2
   material: {fileID: 2100000, guid: cd81ed191b0b2499aa11983c907e8eb3, type: 2}
   cloudCompute: {fileID: 7200000, guid: 021794b0e5ecf46969b907cbf967a284, type: 3}
-  particleMass: 1
-  particleRestDensity: 50
-  particleStiffness: 200000
-  particleViscosity: 30000
-  smoothingLength: 3
+  particleRadius: 0
+  particleMass: 0.001
+  particleRestDensity: 1e-19
+  particleStiffness: 2.011711e+12
+  particleViscosity: 0.2
+  smoothingLength: 50
 --- !u!20 &534669904
 Camera:
   m_ObjectHideFlags: 0
@@ -261,10 +262,10 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 534669902}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -100}
+  m_LocalRotation: {x: -0.069843516, y: 0, z: 0, w: 0.997558}
+  m_LocalPosition: {x: -1, y: -23.33, z: -170}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: -8.01, y: 0, z: 0}
