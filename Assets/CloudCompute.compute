@@ -35,6 +35,8 @@ float time_step;
 
 /*** STARTED FROM CODE BY:
 // https://github.com/multiprecision/sph_opengl/tree/master/shader
+// also see:
+// rlguy.com/sphfluidsim/
 // 
 // much mdifications, changes pending to go into 3D and follow papers such as:
 // Daniel J. Price
@@ -75,6 +77,32 @@ float GradCubicSpline(float q) {
 	return result / ( PI_FLOAT);
 }
 
+// Barrier is costly! 72 fps to 41 fps without!
+float3 BarrierForces( uint x ) {
+	Particle p = cloud[x];
+	float size;
+	size = 100;
+	float repulse;
+	repulse = 3000000000000000000.0 * p.d;
+	float3 force;
+	force = 0;
+	if (p.pos.x < -size) { 
+		force.x = -repulse * (p.pos.x + size);
+	} else if (p.pos.x > size) { 
+		force.x = -repulse * (p.pos.x - size);
+	}
+	if (p.pos.y < -size) { 
+		force.y = -repulse * (p.pos.y + size);
+	} else if (p.pos.y > size) { 
+		force.y = -repulse * (p.pos.y - size);
+	}
+	if (p.pos.z < -size) { 
+		force.z = -repulse * (p.pos.z + size);
+	} else  if (p.pos.z > size) { 
+		force.z = -repulse * (p.pos.z - size);
+	}
+	return force;
+}
 
 [numthreads(512, 1, 1)]
 void Sph(uint3 id : SV_DispatchThreadID)
@@ -82,32 +110,24 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	Particle p = cloud[id.x];
 	float3 a = 0;
 	float3 d = 0;
-	float3 d2;
 	float r;
 	float r2;
 	float factor2 = particleMass * 315.0 / ( 64.0*PI_FLOAT*smoothingLength9);
 	float dsum = 0;
 	for (uint l = 0; l < _npts; ++l) {
 		d = (cloud[l].pos - p.pos);
-		d2 = d * d;
-		r2 = d2.x + d2.y + d2.z;
+		r2 = dot(d,d); // 62 fps to 70 fps
 		if (r2 < smoothingLength2) {
 			dsum +=pow((smoothingLength2-r2),3);
 		}
-		/**
-		r = distance(cloud[l].pos,p.pos);
-		if (r < smoothingLength)
-		{
-			dsum += CubicSpline(r/particleRadius);
-		}
-		**/
 	}
 	dsum *= factor2;
 	cloud[id.x].d = dsum;
 	cloud[id.x].p = particleStiffness * (dsum - particleRestDensity); // max(particleStiffness * (dsum - particleRestDensity), 0.f);
 
 // BARRIER ONE, now PRESSURE FORCE
-	AllMemoryBarrierWithGroupSync();
+	// AllMemoryBarrierWithGroupSync();
+	GroupMemoryBarrier(); // Try just this instead.
 
 	float factor1;
 	float3 p_fs = 0;
@@ -119,31 +139,62 @@ void Sph(uint3 id : SV_DispatchThreadID)
 
 	for (uint j = 0; j < id.x; ++j) {
 		d = (cloud[j].pos - p.pos);
-		r = length(d);
-		if (r<smoothingLength)
+		r2 = dot(d,d);
+		if (r2<smoothingLength2)
 		{
+			r = sqrt(r2); // 62 fps to 70 fps to 73
 			p_fs -= (p.p + cloud[j].p) / (2.0 - cloud[j].d) *  pow(smoothingLength - r, 2) * normalize(d);
 			v_fs += (cloud[j].vel - p.vel)/cloud[j].d *  (smoothingLength -r);
 		}
 	}
 	for (uint k = id.x+1; k < _npts; ++k) {
 		d = (cloud[k].pos - p.pos);
-		r = length(d);
-		if (r<smoothingLength)
+		r2 = dot(d,d);
+		if (r2<smoothingLength2)
 		{
-			p_fs -= (p.p + cloud[k].p) / (2.0 - cloud[k].d)* factor1 * pow(smoothingLength - r, 2) * normalize(d);
-			v_fs += (cloud[k].vel - p.vel)/cloud[k].d * factor1 * (smoothingLength -r);
+			r = sqrt(r2);
+			p_fs -= (p.p + cloud[k].p) / (2.0 - cloud[k].d)* pow(smoothingLength - r, 2) * normalize(d);
+			v_fs += (cloud[k].vel - p.vel)/cloud[k].d *  (smoothingLength -r);
 		}
 	}
 	v_fs *= particleViscosity;
 	g.y = -2000000000000000000.0 * cloud[id.x].d;
 
-    cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g); // external force from gravity not correct yet
+	float size;
+	size = 100;
+	float repulse;
+	repulse = 3000000000000000000.0 * p.d;
+	float3 force;
+	force = 0;
+	if (p.pos.x < -size) { 
+		force.x = -repulse * (p.pos.x + size);
+		cloud[id.x].vel.x = abs(p.vel.x);
+	} else if (p.pos.x > size) { 
+		force.x = -repulse * (p.pos.x - size);
+		cloud[id.x].vel.x = -abs(p.vel.x);
+	}
+	if (p.pos.y < -size) { 
+		force.y = -repulse * (p.pos.y + size);
+		cloud[id.x].vel.y = abs(p.vel.y);
+	} else if (p.pos.y > size) { 
+		force.y = -repulse * (p.pos.y - size);
+		cloud[id.x].vel.y = -abs(p.vel.y);
+	}
+	if (p.pos.z < -size) { 
+		force.z = -repulse * (p.pos.z + size);
+		cloud[id.x].vel.z = abs(p.vel.z);
+	} else  if (p.pos.z > size) { 
+		force.z = -repulse * (p.pos.z - size);
+		cloud[id.x].vel.z = -abs(p.vel.z);
+	}
 
-// BARRIER 2, NOW INTEGRATE AND LIMIT
+   // cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g );
+       cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force);
 
-	AllMemoryBarrierWithGroupSync();
+// BARRIER 2, NOW INTEGRATE
 
+	// AllMemoryBarrierWithGroupSync();
+	GroupMemoryBarrier(); // Try just this instead.
 
 	a = cloud[id.x].force / cloud[id.x].d;
 	float3 v_n = cloud[id.x].vel;
@@ -151,38 +202,12 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	v_n += a * time_step;
 	p_n += v_n * time_step;
 
-	if (p_n.x < -150) { 
-		p_n.x = -150;
-		v_n.x *= -0.3;
-	}
-	if (p_n.x > 150) { 
-		p_n.x = 150;
-		v_n.x *= -0.3;
-	}
-	if (p_n.y < -150.0) { 
-		p_n.y = -150.0;
-		v_n.y *= -0.1;
-		cloud[id.x].color.b = 0;
-		cloud[id.x].color.r = 1;
-	}
-	if (p_n.y > 150) { 
-		p_n.y = 150;
-		v_n.y *= -0.3;
-	}
-	if (p_n.z < -150) { 
-		p_n.z = -150;
-		v_n.z *= -0.3;
-	}
-	if (p_n.z > 150) { 
-		p_n.z = 150;
-		v_n.z *= -0.3;
-	}
-
 	cloud[id.x].pos = p_n;
 	cloud[id.x].vel = v_n;
 
-	AllMemoryBarrierWithGroupSync();
-
+	// Do I need memory barrier at end of it? To be sure not running when next dispatched?? Probably not.
+	// AllMemoryBarrierWithGroupSync();
+	//GroupMemoryBarrier(); // Try just this instead.
 };
 
 [numthreads(512, 1, 1)]
@@ -316,18 +341,17 @@ void SmoothBall(uint3 id : SV_DispatchThreadID)
 		l2 = dot(d,d);
 		a +=  normalize(d) / l2;
 	}
+
 	adr = dot(a,normalize(p.pos));
 
 	cloud[id.x].force = -(a-adr*normalize(p.pos));
 
 	AllMemoryBarrierWithGroupSync();
-
-//	a = cloud[id.x].force / cloud[id.x].d;
-
-//	cloud[id.x].vel += a * time_step;
+	// GroupMemoryBarrier(); // Try just this instead.
 
 	cloud[id.x].pos += cloud[id.x].force;
 
 	cloud[id.x].force = 0;
 };
+
 
