@@ -116,6 +116,7 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	float factor2 = particleMass * 315.0 / ( 64.0*PI_FLOAT*smoothingLength9);
 	float dsum = 0;
 	for (uint l = 0; l < _npts; ++l) {
+		cloud[l].color.r *= 0.8;
 		d = (cloud[l].pos - p.pos);
 		d2 = d*d;
 		r2 = d2.x + d2.y + d2.z;
@@ -123,14 +124,23 @@ void Sph(uint3 id : SV_DispatchThreadID)
 			dsum +=pow((smoothingLength2-r2),3);
 			if (id.x==100) {
 				cloud[l].color.r = 1;
-				cloud[l].color.g = 0;
-				cloud[l].color.b = 0;
+				cloud[l].color.g *= 0.9;
+				cloud[l].color.b *= 0.9;
 			}
 		}
 	}
 	dsum *= factor2;
 	cloud[id.x].d = dsum;
-	cloud[id.x].p = particleStiffness * (dsum - particleRestDensity); // max(particleStiffness * (dsum - particleRestDensity), 0.f);
+	float densityDelta = dsum - particleRestDensity;
+	if (densityDelta < 0) {
+		cloud[id.x].color.g = 1;
+		cloud[id.x].color.b = 0;
+	}
+	else {
+		cloud[id.x].color.g = 0;
+		cloud[id.x].color.b = 1;
+	}
+	cloud[id.x].p = max(particleStiffness * densityDelta, 0.f);
 
 // BARRIER ONE, now PRESSURE FORCE
 	// AllMemoryBarrierWithGroupSync();
@@ -168,31 +178,37 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	g.y = -2000000000000000000.0 * cloud[id.x].d;
 
 	float size;
-	size = 100;
+	size = 12;
 	float repulse;
-	repulse = 3000000000000000000.0 * p.d;
+	repulse = 2000000000000000000.0 * p.d;
 	float3 force;
 	force = 0;
 	if (p.pos.x < -size) { 
 		force.x = -repulse * (p.pos.x + size);
-		cloud[id.x].vel.x = abs(p.vel.x);
+		cloud[id.x].vel *= 0.99;
+		//cloud[id.x].vel.x = abs(p.vel.x);
 	} else if (p.pos.x > size) { 
 		force.x = -repulse * (p.pos.x - size);
-		cloud[id.x].vel.x = -abs(p.vel.x);
+		cloud[id.x].vel *= 0.99;
+		// cloud[id.x].vel.x = -abs(p.vel.x);
 	}
 	if (p.pos.y < -size) { 
 		force.y = -repulse * (p.pos.y + size);
-		cloud[id.x].vel.y = abs(p.vel.y);
+		cloud[id.x].vel *= 0.99;
+		// cloud[id.x].vel.y = abs(p.vel.y);
 	} else if (p.pos.y > size) { 
 		force.y = -repulse * (p.pos.y - size);
-		cloud[id.x].vel.y = -abs(p.vel.y);
+		cloud[id.x].vel *= 0.99;
+		// cloud[id.x].vel.y = -abs(p.vel.y);
 	}
 	if (p.pos.z < -size) { 
 		force.z = -repulse * (p.pos.z + size);
-		cloud[id.x].vel.z = abs(p.vel.z);
+		cloud[id.x].vel *= 0.99;
+		// cloud[id.x].vel.z = abs(p.vel.z);
 	} else  if (p.pos.z > size) { 
 		force.z = -repulse * (p.pos.z - size);
-		cloud[id.x].vel.z = -abs(p.vel.z);
+		cloud[id.x].vel *= 0.99;
+		// 	cloud[id.x].vel.z = -abs(p.vel.z);
 	}
 
    // cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g );

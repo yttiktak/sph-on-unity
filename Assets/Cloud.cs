@@ -26,7 +26,7 @@ public class Cloud : MonoBehaviour {
 
     int nthr;
 	int ngrps;
-	int npts = 512 * 64; // 100 mill is too big!
+    int npts; // 100 mill is too big!
 	ComputeBuffer compute_buffer;
 
 	struct Particle
@@ -39,14 +39,19 @@ public class Cloud : MonoBehaviour {
 		public float pressure;//14
 	}
 
-	void Start () {
-		uint ngx,ngy,ngz; // groups declared in the compute shader
+    void Start() {
+        uint ngx, ngy, ngz; // groups declared in the compute shader
         float rad;
         float phi;
         float theta;
-		float maxRad = 100f;
-		if (methods == Methods.sph) {
-			maxRad = 50.0f;
+        float maxRad = 100f;
+        if ((Application.platform == RuntimePlatform.WindowsPlayer) || (Application.platform == RuntimePlatform.WindowsEditor)) {
+            npts = 512 * 15;
+        } else { 
+            npts = 512 * 64;
+        }
+        if (methods == Methods.sph) {
+			maxRad = 10.0f;
 		}
 		compute_buffer = new ComputeBuffer (npts, sizeof(float) * 14, ComputeBufferType.Default);
 
@@ -78,7 +83,7 @@ public class Cloud : MonoBehaviour {
             cloud[i].position = new Vector3(rad * Mathf.Cos(phi), rad * Mathf.Sin(theta) * Mathf.Sin(phi), rad * Mathf.Cos(theta) * Mathf.Sin(phi));
 			cloud [i].velocity = new Vector3 (0, 0, 0); // 200000.0f *  new Vector3 (Random.Range (-1f, 1f), Random.Range (-1f, 1f), Random.Range (-1f, 1f));
 			cloud [i].force = new Vector3 (0,0,0); //(Random.Range (-1f, 1), Random.Range (-1f, 1f), Random.Range (-1f, 1f));
-			cloud [i].color = new Vector3(0,0.5f,1);
+			cloud [i].color = new Vector3(0,0.5f,0.5f);
 			cloud [i].density = 100;
 			cloud [i].pressure = 0;
 		}

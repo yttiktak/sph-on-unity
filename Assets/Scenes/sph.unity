@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.44657898, g: 0.4964133, b: 0.5748178, a: 1}
+  m_IndirectSpecularColor: {r: 0.44657826, g: 0.49641263, b: 0.57481676, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -212,10 +212,10 @@ MonoBehaviour:
   cloudCompute: {fileID: 7200000, guid: 021794b0e5ecf46969b907cbf967a284, type: 3}
   particleRadius: 0
   particleMass: 0.0001
-  particleRestDensity: 0.02
-  particleStiffness: 2.011711e+12
-  particleViscosity: 0.002
-  smoothingLength: 5
+  particleRestDensity: 0.0000001
+  particleStiffness: 2.011711e+16
+  particleViscosity: 5
+  smoothingLength: 2
 --- !u!20 &534669904
 Camera:
   m_ObjectHideFlags: 0
@@ -238,7 +238,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 63
+  field of view: 29
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -263,7 +263,7 @@ Transform:
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 534669902}
   m_LocalRotation: {x: 0.034027316, y: 0, z: 0, w: 0.99942094}
-  m_LocalPosition: {x: -1, y: -37.92, z: -370.6}
+  m_LocalPosition: {x: -1, y: -10.1, z: -194.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
