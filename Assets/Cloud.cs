@@ -26,7 +26,7 @@ public class Cloud : MonoBehaviour {
 
     int nthr;
 	int ngrps;
-	int npts = 512 * 32; // 100 mill is too big!
+	int npts = 512 * 64; // 100 mill is too big!
 	ComputeBuffer compute_buffer;
 
 	struct Particle
@@ -94,7 +94,7 @@ public class Cloud : MonoBehaviour {
 		Shader.SetGlobalFloat("smoothingLength6",Mathf.Pow(smoothingLength,6));
 		Shader.SetGlobalFloat ("smoothingLength9", Mathf.Pow (smoothingLength, 9));
 		if (methods == Methods.sph) {
-			Shader.SetGlobalFloat ("time_step", 0.00004f);
+			Shader.SetGlobalFloat ("time_step", 0.0000001f);
 		} else {
 			Shader.SetGlobalFloat ("time_step", 0.051f);			
 		}

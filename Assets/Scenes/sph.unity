@@ -211,11 +211,11 @@ MonoBehaviour:
   material: {fileID: 2100000, guid: cd81ed191b0b2499aa11983c907e8eb3, type: 2}
   cloudCompute: {fileID: 7200000, guid: 021794b0e5ecf46969b907cbf967a284, type: 3}
   particleRadius: 0
-  particleMass: 0.001
-  particleRestDensity: 0.00001
+  particleMass: 0.0001
+  particleRestDensity: 0.02
   particleStiffness: 2.011711e+12
-  particleViscosity: 0.2
-  smoothingLength: 60
+  particleViscosity: 0.002
+  smoothingLength: 5
 --- !u!20 &534669904
 Camera:
   m_ObjectHideFlags: 0

@@ -110,15 +110,22 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	Particle p = cloud[id.x];
 	float3 a = 0;
 	float3 d = 0;
+	float3 d2;
 	float r;
 	float r2;
 	float factor2 = particleMass * 315.0 / ( 64.0*PI_FLOAT*smoothingLength9);
 	float dsum = 0;
 	for (uint l = 0; l < _npts; ++l) {
 		d = (cloud[l].pos - p.pos);
-		r2 = dot(d,d); // 62 fps to 70 fps
+		d2 = d*d;
+		r2 = d2.x + d2.y + d2.z;
 		if (r2 < smoothingLength2) {
 			dsum +=pow((smoothingLength2-r2),3);
+			if (id.x==100) {
+				cloud[l].color.r = 1;
+				cloud[l].color.g = 0;
+				cloud[l].color.b = 0;
+			}
 		}
 	}
 	dsum *= factor2;
@@ -192,9 +199,7 @@ void Sph(uint3 id : SV_DispatchThreadID)
        cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force);
 
 // BARRIER 2, NOW INTEGRATE
-
-	// AllMemoryBarrierWithGroupSync();
-	GroupMemoryBarrier(); // Try just this instead.
+	GroupMemoryBarrier(); 
 
 	a = cloud[id.x].force / cloud[id.x].d;
 	float3 v_n = cloud[id.x].vel;
@@ -205,9 +210,6 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	cloud[id.x].pos = p_n;
 	cloud[id.x].vel = v_n;
 
-	// Do I need memory barrier at end of it? To be sure not running when next dispatched?? Probably not.
-	// AllMemoryBarrierWithGroupSync();
-	//GroupMemoryBarrier(); // Try just this instead.
 };
 
 [numthreads(512, 1, 1)]
