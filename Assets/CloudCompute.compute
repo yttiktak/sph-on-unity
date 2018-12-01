@@ -104,7 +104,7 @@ float3 BarrierForces( uint x ) {
 	return force;
 }
 
-[numthreads(512, 1, 1)]
+[numthreads(1024, 1, 1)]
 void Sph(uint3 id : SV_DispatchThreadID)
 {
 	Particle p = cloud[id.x];
@@ -115,36 +115,36 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	float r2;
 	float factor2 = particleMass * 315.0 / ( 64.0*PI_FLOAT*smoothingLength9);
 	float dsum = 0;
-	for (uint l = 0; l < _npts; ++l) {
-		cloud[l].color.r *= 0.8;
+	int spanx = 1;
+	int lowx = 0; //max(id.x - spanx,0);
+	int highx = _npts; // min(id.x+spanx,_npts);
+	for (uint l = lowx; l < highx; ++l) {
 		d = (cloud[l].pos - p.pos);
 		d2 = d*d;
 		r2 = d2.x + d2.y + d2.z;
 		if (r2 < smoothingLength2) {
 			dsum +=pow((smoothingLength2-r2),3);
-			if (id.x==100) {
-				cloud[l].color.r = 1;
-				cloud[l].color.g *= 0.9;
-				cloud[l].color.b *= 0.9;
-			}
 		}
-	}
+	}		
+
 	dsum *= factor2;
 	cloud[id.x].d = dsum;
 	float densityDelta = dsum - particleRestDensity;
+
 	if (densityDelta < 0) {
-		cloud[id.x].color.g = 1;
-		cloud[id.x].color.b = 0;
+		cloud[id.x].color.g = 1; // (id.x+16000);
+		cloud[id.x].color.b = 0; // id.x % 256;
 	}
 	else {
-		cloud[id.x].color.g = 0;
-		cloud[id.x].color.b = 1;
+		cloud[id.x].color.g = 0; //id.x % 256;
+		cloud[id.x].color.b = 1; //id.x % 16000;
 	}
-	cloud[id.x].p = max(particleStiffness * densityDelta, 0.f);
+
+//	cloud[id.x].color.r *=0.95;
+	cloud[id.x].p =  max(particleStiffness * densityDelta, 0.f);
 
 // BARRIER ONE, now PRESSURE FORCE
-	// AllMemoryBarrierWithGroupSync();
-	GroupMemoryBarrier(); // Try just this instead.
+	GroupMemoryBarrier(); 
 
 	float factor1;
 	float3 p_fs = 0;
@@ -154,7 +154,7 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	factor1 = 45.0 / (PI_FLOAT * smoothingLength6);
 	p = cloud[id.x];
 
-	for (uint j = 0; j < id.x; ++j) {
+	for (uint j = lowx; j < id.x; ++j) {
 		d = (cloud[j].pos - p.pos);
 		r2 = dot(d,d);
 		if (r2<smoothingLength2)
@@ -164,7 +164,7 @@ void Sph(uint3 id : SV_DispatchThreadID)
 			v_fs += (cloud[j].vel - p.vel)/cloud[j].d *  (smoothingLength -r);
 		}
 	}
-	for (uint k = id.x+1; k < _npts; ++k) {
+	for (uint k = id.x+1; k < highx; ++k) {
 		d = (cloud[k].pos - p.pos);
 		r2 = dot(d,d);
 		if (r2<smoothingLength2)
@@ -175,44 +175,40 @@ void Sph(uint3 id : SV_DispatchThreadID)
 		}
 	}
 	v_fs *= particleViscosity;
-	g.y = -2000000000000000000.0 * cloud[id.x].d;
+	g.y = -100000000000000000.0 * cloud[id.x].d;
+
 
 	float size;
 	size = 12;
 	float repulse;
-	repulse = 2000000000000000000.0 * p.d;
+	repulse = 1000000000000000000.0 * p.d;
 	float3 force;
 	force = 0;
 	if (p.pos.x < -size) { 
 		force.x = -repulse * (p.pos.x + size);
 		cloud[id.x].vel *= 0.99;
-		//cloud[id.x].vel.x = abs(p.vel.x);
 	} else if (p.pos.x > size) { 
 		force.x = -repulse * (p.pos.x - size);
 		cloud[id.x].vel *= 0.99;
-		// cloud[id.x].vel.x = -abs(p.vel.x);
 	}
 	if (p.pos.y < -size) { 
 		force.y = -repulse * (p.pos.y + size);
 		cloud[id.x].vel *= 0.99;
-		// cloud[id.x].vel.y = abs(p.vel.y);
 	} else if (p.pos.y > size) { 
 		force.y = -repulse * (p.pos.y - size);
 		cloud[id.x].vel *= 0.99;
-		// cloud[id.x].vel.y = -abs(p.vel.y);
 	}
 	if (p.pos.z < -size) { 
 		force.z = -repulse * (p.pos.z + size);
 		cloud[id.x].vel *= 0.99;
-		// cloud[id.x].vel.z = abs(p.vel.z);
 	} else  if (p.pos.z > size) { 
 		force.z = -repulse * (p.pos.z - size);
 		cloud[id.x].vel *= 0.99;
-		// 	cloud[id.x].vel.z = -abs(p.vel.z);
 	}
 
-   // cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g );
-       cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force);
+
+  // cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g );
+    cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force);
 
 // BARRIER 2, NOW INTEGRATE
 	GroupMemoryBarrier(); 
@@ -365,7 +361,6 @@ void SmoothBall(uint3 id : SV_DispatchThreadID)
 	cloud[id.x].force = -(a-adr*normalize(p.pos));
 
 	AllMemoryBarrierWithGroupSync();
-	// GroupMemoryBarrier(); // Try just this instead.
 
 	cloud[id.x].pos += cloud[id.x].force;
 
