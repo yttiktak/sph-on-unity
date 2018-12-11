@@ -213,8 +213,8 @@ MonoBehaviour:
   particleRadius: 0
   particleMass: 0.0001
   particleRestDensity: 0.0005
-  particleStiffness: 1e+19
-  particleViscosity: 1000
+  particleStiffness: 2e+18
+  particleViscosity: 2000
   smoothingLength: 1.5
 --- !u!20 &534669904
 Camera:
@@ -238,7 +238,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 12
+  field of view: 8
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -263,7 +263,7 @@ Transform:
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 534669902}
   m_LocalRotation: {x: 0.034027316, y: 0, z: 0, w: 0.99942094}
-  m_LocalPosition: {x: 2.8, y: 11.6, z: -194.5}
+  m_LocalPosition: {x: 0, y: 11.6, z: -194.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}

@@ -1,4 +1,5 @@
 ﻿#pragma kernel Sph
+#pragma kernel Sort
 #pragma kernel Gravity
 #pragma kernel Power
 #pragma kernel SmoothBall
@@ -11,10 +12,23 @@ struct Particle
 	float3 color;
 	float d;
 	float p;
+	uint xrank;
+	uint yrank;
+	uint zrank;
 };
 
-RWStructuredBuffer<Particle> cloud;
-uint _npts; // set! gag. Not in dispatch params??
+// actually an array of 3 floats, in cpu land
+struct Stats
+{
+	int thread_count;
+	float max_density;
+	float min_density;
+};
+
+globallycoherent RWStructuredBuffer<Particle> cloud;
+globallycoherent RWStructuredBuffer<uint> index_by_x;
+RWStructuredBuffer<Stats> statistics; 
+RWStructuredBuffer<uint> index_by_x_pong;
 
 // some globals
 float particleRadius;
@@ -43,71 +57,49 @@ float time_step;
 // Smoothed Particle Hydrodynamics and Magnetohydrodynamics
 ***/ 
 
+// rank sort
+[numthreads(1024, 1, 1)]
+void Sort(uint3 id : SV_DispatchThreadID)
+{
+	uint npts;
+	uint stride;
+	cloud.GetDimensions(npts,stride);
 
-// Price, eq. # 6
-float CubicSpline(float q) {
-	float result;
-	if (q < 1) {
-		result = 0.25 * pow((2.0-q),3) - pow((1.0-q),3);
-	} else {
-	 	if (q<2) {
-			result = 0.25 * pow((2.0-q),3);
-		} else {
-			result = 0;
+	float3 d;
+
+	Particle p = cloud[id.x];
+	p.xrank = 0;
+	p.yrank = 0;
+	p.zrank = 0;
+	for (uint ri=0; ri < npts; ri++) {
+		d = cloud[ri].pos;
+		if ((p.pos.x<d.x)||(ri==id.x)) {
+			p.xrank +=1;
+		}
+		if ((p.pos.y<d.y)||(ri==id.x)) {
+			p.yrank +=1;
+		}
+		if ((p.pos.z<d.z)||(ri==id.x)) {
+			p.zrank +=1;
 		}
 	}
-	return result; //  / ( smoothingLength3 * PI_FLOAT);
-}
+	cloud[id.x].xrank = p.xrank;
+	AllMemoryBarrierWithGroupSync(); 
 
-// Price, eq # 85
-float GradCubicSpline(float q) {
-	float result;
-	if (q < 0.666) {
-		result = 1; 
-	} else {
-	 	if (q<1) {
-			result = -3.0*q + 2.25*pow(q,2);
-		} else {
-			result = 0.75 * pow((2.0 - q),2);
-		}
-		if (q > 2) {
-		    result = 0;
+	for (uint q=0; q<npts; q ++ ) {
+		if (cloud[q].xrank == id.x) {
+			index_by_x[id.x] = q; 
 		}
 	}
-	return result / ( PI_FLOAT);
-}
-
-// Barrier is costly! 72 fps to 41 fps without!
-float3 BarrierForces( uint x ) {
-	Particle p = cloud[x];
-	float size;
-	size = 100;
-	float repulse;
-	repulse = 3000000000000000000.0 * p.d;
-	float3 force;
-	force = 0;
-	if (p.pos.x < -size) { 
-		force.x = -repulse * (p.pos.x + size);
-	} else if (p.pos.x > size) { 
-		force.x = -repulse * (p.pos.x - size);
-	}
-	if (p.pos.y < -size) { 
-		force.y = -repulse * (p.pos.y + size);
-	} else if (p.pos.y > size) { 
-		force.y = -repulse * (p.pos.y - size);
-	}
-	if (p.pos.z < -size) { 
-		force.z = -repulse * (p.pos.z + size);
-	} else  if (p.pos.z > size) { 
-		force.z = -repulse * (p.pos.z - size);
-	}
-	return force;
 }
 
 [numthreads(1024, 1, 1)]
 void Sph(uint3 id : SV_DispatchThreadID)
 {
-	Particle p = cloud[id.x];
+	uint npts;
+	uint stride;
+	cloud.GetDimensions(npts,stride);
+
 	float3 a = 0;
 	float3 d = 0;
 	float3 d2;
@@ -115,36 +107,58 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	float r2;
 	float factor2 = particleMass * 315.0 / ( 64.0*PI_FLOAT*smoothingLength9);
 	float dsum = 0;
-	int spanx = 1;
-	int lowx = 0; //max(id.x - spanx,0);
-	int highx = _npts; // min(id.x+spanx,_npts);
-	for (uint l = lowx; l < highx; ++l) {
-		d = (cloud[l].pos - p.pos);
-		d2 = d*d;
-		r2 = d2.x + d2.y + d2.z;
-		if (r2 < smoothingLength2) {
+
+
+	// COLOR OUT OF ORDER POINTS
+	for (uint qt=1; qt<npts; qt ++ ) {
+		Particle p1 = cloud[index_by_x[qt]];
+		Particle p2 = cloud[index_by_x[qt-1]];
+		if (p1.pos.x > p2.pos.x) {
+			cloud[index_by_x[qt]].color.b = 1;
+		} 
+	}
+
+	uint sortedId =  index_by_x[id.x];
+	Particle p = cloud[sortedId];
+
+	int spanx = 80;
+
+	while ((abs(cloud[index_by_x[id.x+spanx]].pos.x -p.pos.x) <=  smoothingLength)&&(spanx<(npts-id.x))) {
+		spanx +=1;
+	}
+	while ((abs(cloud[index_by_x[id.x-spanx]].pos.x - p.pos.x) <= smoothingLength)&&(spanx<id.x)) {
+		spanx +=1;
+	}
+	spanx +=5;
+
+	uint lowx = 0; // max(id.x - spanx,0);
+	uint highx = npts; // min(id.x+spanx,npts);
+	uint lowxs =  max(id.x - spanx,0);
+	uint highxs = min(id.x+spanx,npts);
+	for (uint l = lowxs; l < highxs; ++l) {
+		d = cloud[index_by_x[l]].pos - p.pos;
+		r = length(d); 
+		if (r < smoothingLength) {
+			r2 = dot(r,r);
 			dsum +=pow((smoothingLength2-r2),3);
+			// color the zone of smoothing for one arbitrary point at 2000
+			if (sortedId == 5000) {
+				cloud[index_by_x[l]].color.r = ((l>=lowxs)&&(l<highxs))?0:1;
+				cloud[index_by_x[l]].color.g = ((l>=lowxs)&&(l<highxs))?1:0;
+			}
 		}
 	}		
 
 	dsum *= factor2;
-	cloud[id.x].d = dsum;
+	cloud[sortedId].d = dsum;
 	float densityDelta = dsum - particleRestDensity;
 
-	if (densityDelta < 0) {
-		cloud[id.x].color.g = 1; // (id.x+16000);
-		cloud[id.x].color.b = 0; // id.x % 256;
-	}
-	else {
-		cloud[id.x].color.g = 0; //id.x % 256;
-		cloud[id.x].color.b = 1; //id.x % 16000;
-	}
-
-//	cloud[id.x].color.r *=0.95;
-	cloud[id.x].p =  max(particleStiffness * densityDelta, 0.f);
+	cloud[sortedId].p =  max(particleStiffness * densityDelta, 0.f);
 
 // BARRIER ONE, now PRESSURE FORCE
-	GroupMemoryBarrier(); 
+	AllMemoryBarrierWithGroupSync(); 
+
+	cloud[sortedId].color *= float3(0.995,.97,0.97); 
 
 	float factor1;
 	float3 p_fs = 0;
@@ -152,30 +166,26 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	float3 g = 0;
 
 	factor1 = 45.0 / (PI_FLOAT * smoothingLength6);
-	p = cloud[id.x];
+	p = cloud[sortedId];
 
-	for (uint j = lowx; j < id.x; ++j) {
-		d = (cloud[j].pos - p.pos);
+	for (uint j = lowxs; j < highxs; ++j) {
+		uint ibxj = index_by_x[j];
+		if (ibxj == sortedId) {
+			continue;
+		}
+		d = (cloud[ibxj].pos - p.pos);
 		r2 = dot(d,d);
 		if (r2<smoothingLength2)
 		{
-			r = sqrt(r2); // 62 fps to 70 fps to 73
-			p_fs -= (p.p + cloud[j].p) / (2.0 - cloud[j].d) *  pow(smoothingLength - r, 2) * normalize(d);
-			v_fs += (cloud[j].vel - p.vel)/cloud[j].d *  (smoothingLength -r);
+			r = sqrt(r2); 
+			p_fs -= (p.p + cloud[ibxj].p) / (2.0 - cloud[ibxj].d) *  pow(smoothingLength - r, 2) * normalize(d);
+			v_fs += (cloud[ibxj].vel - p.vel)/cloud[ibxj].d *  (smoothingLength -r);
 		}
 	}
-	for (uint k = id.x+1; k < highx; ++k) {
-		d = (cloud[k].pos - p.pos);
-		r2 = dot(d,d);
-		if (r2<smoothingLength2)
-		{
-			r = sqrt(r2);
-			p_fs -= (p.p + cloud[k].p) / (2.0 - cloud[k].d)* pow(smoothingLength - r, 2) * normalize(d);
-			v_fs += (cloud[k].vel - p.vel)/cloud[k].d *  (smoothingLength -r);
-		}
-	}
+
+
 	v_fs *= particleViscosity;
-	g.y = -100000000000000000.0 * cloud[id.x].d;
+	g.y = -100000000000000000.0 * cloud[sortedId].d;
 
 
 	float size;
@@ -186,47 +196,53 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	force = 0;
 	if (p.pos.x < -size) { 
 		force.x = -repulse * (p.pos.x + size);
-		cloud[id.x].vel *= 0.99;
+		cloud[sortedId].vel *= 0.99;
 	} else if (p.pos.x > size) { 
 		force.x = -repulse * (p.pos.x - size);
-		cloud[id.x].vel *= 0.99;
+		cloud[sortedId].vel *= 0.99;
 	}
 	if (p.pos.y < -size) { 
 		force.y = -repulse * (p.pos.y + size);
-		cloud[id.x].vel *= 0.99;
+		cloud[sortedId].vel *= 0.99;
 	} else if (p.pos.y > size) { 
 		force.y = -repulse * (p.pos.y - size);
-		cloud[id.x].vel *= 0.99;
+		cloud[sortedId].vel *= 0.99;
 	}
 	if (p.pos.z < -size) { 
 		force.z = -repulse * (p.pos.z + size);
-		cloud[id.x].vel *= 0.99;
+		cloud[sortedId].vel *= 0.99;
 	} else  if (p.pos.z > size) { 
 		force.z = -repulse * (p.pos.z - size);
-		cloud[id.x].vel *= 0.99;
+		cloud[sortedId].vel *= 0.99;
 	}
 
 
-  // cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g );
-    cloud[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force);
+  // cloud[sortedId].force = particleMass * factor1 * ( v_fs + p_fs + g );
+    cloud[sortedId].force = particleMass * factor1 * ( v_fs + p_fs + g + force);
 
 // BARRIER 2, NOW INTEGRATE
-	GroupMemoryBarrier(); 
+	AllMemoryBarrierWithGroupSync();
 
-	a = cloud[id.x].force / cloud[id.x].d;
-	float3 v_n = cloud[id.x].vel;
-	float3 p_n = cloud[id.x].pos;
+	a = cloud[sortedId].force / cloud[sortedId].d;
+	float3 v_n = cloud[sortedId].vel;
+	float3 p_n = cloud[sortedId].pos;
 	v_n += a * time_step;
 	p_n += v_n * time_step;
 
-	cloud[id.x].pos = p_n;
-	cloud[id.x].vel = v_n;
+	cloud[sortedId].pos = p_n;
+	cloud[sortedId].vel = v_n;
 
+	// AllMemoryBarrierWithGroupSync();
+
+	InterlockedAdd(statistics[0].thread_count,1); // needs to be atomic. float or int or whatt?
 };
 
-[numthreads(512, 1, 1)]
+[numthreads(1024, 1, 1)]
 void Gravity(uint3 id : SV_DispatchThreadID)
 {
+	uint npts;
+	uint stride;
+	cloud.GetDimensions(npts,stride);
 	Particle p = cloud[id.x];
 	float3 a = 0;
 	float3 d = 0;
@@ -238,7 +254,7 @@ void Gravity(uint3 id : SV_DispatchThreadID)
 		l2 = d2.x + d2.y + d2.z;
 		a +=  normalize(d) / l2;
 	}
-	for (uint k = id.x+1; k < _npts; ++k) {
+	for (uint k = id.x+1; k < npts; ++k) {
 		d = (cloud[k].pos - p.pos);
 		d2 = d*d;
 		l2 = d2.x + d2.y + d2.z;
@@ -283,9 +299,12 @@ void Gravity(uint3 id : SV_DispatchThreadID)
 	cloud[id.x].vel = v_n;
 };
 
-[numthreads(512, 1, 1)]
+[numthreads(1024, 1, 1)]
 void Power(uint3 id : SV_DispatchThreadID)
 {
+	uint npts;
+	uint stride;
+	cloud.GetDimensions(npts,stride);
 	Particle p = cloud[id.x];
 	float3 a = 0;
 	float3 d = 0;
@@ -293,7 +312,7 @@ void Power(uint3 id : SV_DispatchThreadID)
 		d = (cloud[j].pos - p.pos);
 		a +=  d * length(d);
 	}
-	for (uint k = id.x+1; k < _npts; ++k) {
+	for (uint k = id.x+1; k < npts; ++k) {
 		d = (cloud[k].pos - p.pos);
 		a +=  d * length(d);
 	}
@@ -337,9 +356,12 @@ void Power(uint3 id : SV_DispatchThreadID)
 
 };
 
-[numthreads(512, 1, 1)]
+[numthreads(1024, 1, 1)]
 void SmoothBall(uint3 id : SV_DispatchThreadID)
 {
+	uint npts;
+	uint stride;
+	cloud.GetDimensions(npts,stride);
 	Particle p = cloud[id.x];
 	float3 a = 0;
 	float3 d = 0;
@@ -348,17 +370,21 @@ void SmoothBall(uint3 id : SV_DispatchThreadID)
 	for (uint j = 0; j < id.x; ++j) {
 		d = (cloud[j].pos - p.pos);
 		l2 = dot(d,d);
+		if (l2 > 0.0001) {
 		a +=  normalize(d) / l2;
+		}
 	}
-	for (uint k = id.x+1; k < _npts; ++k) {
+	for (uint k = id.x+1; k < npts; ++k) {
 		d = (cloud[k].pos - p.pos);
 		l2 = dot(d,d);
+		if (l2 > 0.0001) {
 		a +=  normalize(d) / l2;
+		}
 	}
 
 	adr = dot(a,normalize(p.pos));
 
-	cloud[id.x].force = -(a-adr*normalize(p.pos));
+	cloud[id.x].force = -(a-adr*normalize(p.pos)) * 0.001;
 
 	AllMemoryBarrierWithGroupSync();
 

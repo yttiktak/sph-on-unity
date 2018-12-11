@@ -25,6 +25,7 @@
 				float3 color;
 				float d;
 				float p;
+				uint3 extra;
 			};
 
 			struct appdata
