@@ -173,7 +173,7 @@ public class Cloud : MonoBehaviour {
 			cloudCompute.Dispatch (csidSmoothBall, nthr, 1, 1);
 		} else if (methods == Methods.sph) {
 			//thread_count
-			cloudCompute.Dispatch (csidSort, nthr, 1, 1);
+			//cloudCompute.Dispatch (csidSort, nthr, 1, 1);
 			statistics[0] = 0;
 			stats_buffer.SetData (statistics);
 			cloudCompute.SetBuffer(csidSPH,"statistics",stats_buffer); // redundant??

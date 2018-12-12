@@ -188,7 +188,7 @@ GameObject:
   m_Component:
   - component: {fileID: 534669905}
   - component: {fileID: 534669904}
-  - component: {fileID: 534669903}
+  - component: {fileID: 534669906}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: Untagged
@@ -196,26 +196,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &534669903
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInternal: {fileID: 0}
-  m_GameObject: {fileID: 534669902}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cb183dff9c66f4aa8ba98243f8abb69d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  methods: 1
-  material: {fileID: 2100000, guid: cd81ed191b0b2499aa11983c907e8eb3, type: 2}
-  cloudCompute: {fileID: 7200000, guid: 021794b0e5ecf46969b907cbf967a284, type: 3}
-  particleRadius: 0
-  particleMass: 0.0001
-  particleRestDensity: 0.0005
-  particleStiffness: 2e+18
-  particleViscosity: 2000
-  smoothingLength: 1.5
 --- !u!20 &534669904
 Camera:
   m_ObjectHideFlags: 0
@@ -269,3 +249,24 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 3.9, y: 0, z: 0}
+--- !u!114 &534669906
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 534669902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 32cb6fa49240b4ddfa45164d40d12231, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  material: {fileID: 2100000, guid: 7ab4fb0e4939f4e75b07ec28fc69de00, type: 2}
+  minimalCloudCompute: {fileID: 7200000, guid: 94529e815adbe4ae48a945e9e084e6e5, type: 3}
+  legacyCloudCompute: {fileID: 7200000, guid: 021794b0e5ecf46969b907cbf967a284, type: 3}
+  particleRadius: 0
+  particleMass: 0.0001
+  particleRestDensity: 0.00045
+  particleStiffness: 2e+18
+  particleViscosity: 3000
+  smoothingLength: 1.4
+  point1k: {x: 0, y: 0, z: 0}

@@ -71,15 +71,27 @@ void Sort(uint3 id : SV_DispatchThreadID)
 	p.xrank = 0;
 	p.yrank = 0;
 	p.zrank = 0;
-	for (uint ri=0; ri < npts; ri++) {
+	for (uint ri=0; ri < id.x; ri++) {
 		d = cloud[ri].pos;
-		if ((p.pos.x<d.x)||(ri==id.x)) {
+		if (p.pos.x<d.x) {
 			p.xrank +=1;
 		}
-		if ((p.pos.y<d.y)||(ri==id.x)) {
+		if (p.pos.y<d.y) {
 			p.yrank +=1;
 		}
-		if ((p.pos.z<d.z)||(ri==id.x)) {
+		if (p.pos.z<d.z) {
+			p.zrank +=1;
+		}
+	}
+	for (uint ri=id.x+1; ri < npts; ri++) {
+		d = cloud[ri].pos;
+		if (p.pos.x<d.x) {
+			p.xrank +=1;
+		}
+		if (p.pos.y<d.y) {
+			p.yrank +=1;
+		}
+		if (p.pos.z<d.z) {
 			p.zrank +=1;
 		}
 	}
@@ -110,6 +122,7 @@ void Sph(uint3 id : SV_DispatchThreadID)
 
 
 	// COLOR OUT OF ORDER POINTS
+	/***
 	for (uint qt=1; qt<npts; qt ++ ) {
 		Particle p1 = cloud[index_by_x[qt]];
 		Particle p2 = cloud[index_by_x[qt-1]];
@@ -117,6 +130,7 @@ void Sph(uint3 id : SV_DispatchThreadID)
 			cloud[index_by_x[qt]].color.b = 1;
 		} 
 	}
+	***/
 
 	uint sortedId =  index_by_x[id.x];
 	Particle p = cloud[sortedId];
@@ -135,7 +149,7 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	uint highx = npts; // min(id.x+spanx,npts);
 	uint lowxs =  max(id.x - spanx,0);
 	uint highxs = min(id.x+spanx,npts);
-	for (uint l = lowxs; l < highxs; ++l) {
+	for (uint l = lowx; l < highx; ++l) {
 		d = cloud[index_by_x[l]].pos - p.pos;
 		r = length(d); 
 		if (r < smoothingLength) {
@@ -168,7 +182,7 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	factor1 = 45.0 / (PI_FLOAT * smoothingLength6);
 	p = cloud[sortedId];
 
-	for (uint j = lowxs; j < highxs; ++j) {
+	for (uint j = lowx; j < highx; ++j) {
 		uint ibxj = index_by_x[j];
 		if (ibxj == sortedId) {
 			continue;
