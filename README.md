@@ -5,10 +5,8 @@ Started with interesting mistake, resulting in a power law instead of inverse sq
 
 Added gravity, eg inverse square. Naive, no accounting for discreet steps. Boring, too.
 
-Adding SPH. Need to parameterize and get working values for constants.
+Adding SPH.
 
-Runs on Unity2018 on Ubuntu (Bionic). 
-
-Fails on Unity2018 Windows. Tracking that down now.
+Runs on Unity2018 on Ubuntu (Bionic) and on Unity2018 Windows
 
 
