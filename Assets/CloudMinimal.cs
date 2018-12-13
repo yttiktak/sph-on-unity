@@ -44,7 +44,7 @@ public class CloudMinimal : MonoBehaviour {
     int nthr;
 	int ngrps;
     int npts; 
-	ComputeBuffer positionBuffer; //3 floats
+	public static ComputeBuffer positionBuffer; //3 floats
 	ComputeBuffer physicsBuffer;  //8 floats
 	ComputeBuffer dataBuffer;	  //3 floats
 	ComputeBuffer stats_buffer;
@@ -88,6 +88,8 @@ public class CloudMinimal : MonoBehaviour {
 			cloudPhysics [i].density = 100;
 			cloudPhysics [i].pressure = 0;
 		}
+		cloudPhysics [0].density = 90; // to see if it floats 
+		cloudPhysics [9].density = 110; // and if it sinks!
 
 		statistics = new int[3];
 		statistics[0]= 0;
