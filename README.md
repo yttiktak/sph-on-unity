@@ -9,4 +9,8 @@ Adding SPH.
 
 Runs on Unity2018 on Ubuntu (Bionic) and on Unity2018 Windows
 
+Trying some Ideas for sorting. Like, keep a table of neighbors on each particle.
+
+
+
 
