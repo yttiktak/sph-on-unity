@@ -1,15 +1,13 @@
 # sph-on-unity
 Getting Smoothed Particle Hydrodynamics running on computeShaders in Unity3d
 
-Started with interesting mistake, resulting in a power law instead of inverse square gravity.
-
-Added gravity, eg inverse square. Naive, no accounting for discreet steps. Boring, too.
-
-Adding SPH.
-
 Runs on Unity2018 on Ubuntu (Bionic) and on Unity2018 Windows
 
 Trying some Ideas for sorting. Like, keep a table of neighbors on each particle.
+
+but, but.. that adds N*Nneighbors^2 integer compare ops to reduce N^2 distance measurements to N^Nneighbor distance measurements.
+
+At N = 10k and Nn = 100, add 10^4*(10^4 integer compare), remove 10^4*((10^4-10^2) distance).
 
 
 

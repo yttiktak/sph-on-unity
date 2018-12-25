@@ -88,8 +88,6 @@ public class CloudMinimal : MonoBehaviour {
 			cloudPhysics [i].density = 100;
 			cloudPhysics [i].pressure = 0;
 		}
-		cloudPhysics [0].density = 90; // to see if it floats 
-		cloudPhysics [9].density = 110; // and if it sinks!
 
 		statistics = new int[3];
 		statistics[0]= 0;
@@ -144,9 +142,12 @@ public class CloudMinimal : MonoBehaviour {
 		Graphics.DrawProcedural (MeshTopology.Points, npts, 1); // does not speed up it not drawn!
 
 		statistics[0] = 0;
+		statistics [1] = 0;
+		statistics [2] = 0;
 		stats_buffer.SetData (statistics);
 		minimalCloudCompute.Dispatch (csidSPH, nthr, 1, 1);
-
+		stats_buffer.GetData (statistics);
+		Debug.Log ("avg hits= " + statistics[1] / statistics[0] + " nmax=" + statistics [2] );
     }
 
 	void OnDestroy(){

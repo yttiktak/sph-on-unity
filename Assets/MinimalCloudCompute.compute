@@ -1,8 +1,12 @@
 ﻿#pragma kernel Sph
-// 11.5 ms 1024
+// Measure number of particles in an smoothing_length sphere
 struct ParticlePosition
 {
 	float3 pos;
+};
+struct ParticleNeighbors
+{
+	uint neighbor[100];
 };
 struct ParticlePyhsics
 {
@@ -20,8 +24,8 @@ struct ParticleData
 struct Stats
 {
 	int thread_count;
-	float max_density;
-	float min_density;
+	int tot_density;
+	int max_density;
 };
 
 globallycoherent RWStructuredBuffer<ParticlePosition> cloudPosition;
@@ -71,16 +75,23 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	float r2;
 	float factor2 = particleMass * 315.0 / ( 64.0*PI_FLOAT*smoothingLength9);
 	float dsum = 0;
+	int nHit;
 
 	ParticlePosition p = cloudPosition[id.x];
 
+	nHit = 0;
 	for (uint l = 0; l < npts; ++l) {
 		d = cloudPosition[l].pos - p.pos;
 		r2 = dot(d,d); 
 		if (r2 < smoothingLength2) {
+			nHit +=1;
 			dsum +=pow((smoothingLength2-r2),3);
 		}
-	}		
+	}	
+	if (nHit > statistics[0].max_density) {
+	   statistics[0].max_density = nHit;
+	}
+	InterlockedAdd(statistics[0].tot_density,nHit); // needs to be atomic.	
 
 	dsum *= factor2;
 	cloudPhysics[id.x].d = dsum;
@@ -160,6 +171,6 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	cloudPhysics[id.x].vel = v_n;
 
 
-	// InterlockedAdd(statistics[0].thread_count,1); // needs to be atomic. float or int or whatt?
+	InterlockedAdd(statistics[0].thread_count,1); // needs to be atomic. 
 };
 
