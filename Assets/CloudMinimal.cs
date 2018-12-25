@@ -22,6 +22,11 @@ struct ParticleData
 	public Vector3 color;
 }
 		
+// be sure to enable unsafe code in player settings.
+internal unsafe struct ParticleNeighbors
+{
+	public fixed uint neighbor[100];
+};
 
 public class CloudMinimal : MonoBehaviour {
 
@@ -48,6 +53,7 @@ public class CloudMinimal : MonoBehaviour {
 	ComputeBuffer physicsBuffer;  //8 floats
 	ComputeBuffer dataBuffer;	  //3 floats
 	ComputeBuffer stats_buffer;
+	ComputeBuffer neighbors_buffer; // 100 uints
 
 	int[] statistics;
 
@@ -64,6 +70,13 @@ public class CloudMinimal : MonoBehaviour {
 		physicsBuffer = new ComputeBuffer(npts,sizeof(float)*8, ComputeBufferType.Default);
 		dataBuffer = new ComputeBuffer(npts,sizeof(float)*3, ComputeBufferType.Default);
 		stats_buffer = new ComputeBuffer (1, sizeof(float) * 3, ComputeBufferType.Default);
+		neighbors_buffer = new ComputeBuffer (npts, sizeof(uint) * 100, ComputeBufferType.Default);
+		uint[] fatNothings = new uint[npts * 100];
+		for (uint jn = 0; jn < npts*100; jn++) {
+			fatNothings [jn ] = 0;
+		}
+		neighbors_buffer.SetData (fatNothings);
+		minimalCloudCompute.SetBuffer (csidSPH, "cloudNeighbors", neighbors_buffer);
 
 		csidSPH = minimalCloudCompute.FindKernel ("Sph");
 		csidSmoothBall = legacyCloudCompute.FindKernel ("SmoothBall");
@@ -87,6 +100,7 @@ public class CloudMinimal : MonoBehaviour {
 			cloudData [i].color = new Vector3(0.0f,0.1f,0.1f);
 			cloudPhysics [i].density = 100;
 			cloudPhysics [i].pressure = 0;
+
 		}
 
 		statistics = new int[3];
@@ -144,10 +158,10 @@ public class CloudMinimal : MonoBehaviour {
 		statistics[0] = 0;
 		statistics [1] = 0;
 		statistics [2] = 0;
-		stats_buffer.SetData (statistics);
+	//	stats_buffer.SetData (statistics);
 		minimalCloudCompute.Dispatch (csidSPH, nthr, 1, 1);
-		stats_buffer.GetData (statistics);
-		Debug.Log ("avg hits= " + statistics[1] / statistics[0] + " nmax=" + statistics [2] );
+	//	stats_buffer.GetData (statistics);
+	//	Debug.Log ("avg hits= " + statistics[1] / statistics[0] + " nmax=" + statistics [2] );
     }
 
 	void OnDestroy(){
@@ -155,5 +169,6 @@ public class CloudMinimal : MonoBehaviour {
 		physicsBuffer.Release ();
 		dataBuffer.Release();
 		stats_buffer.Release ();
+		neighbors_buffer.Release ();
 	}
 }

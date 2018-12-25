@@ -6,7 +6,8 @@ struct ParticlePosition
 };
 struct ParticleNeighbors
 {
-	uint neighbor[100];
+	uint nHit;				// right now, was declared uint[100] in cs, with first element number hit. Fix in cs 
+	uint neighbor[99];
 };
 struct ParticlePyhsics
 {
@@ -25,12 +26,13 @@ struct Stats
 {
 	int thread_count;
 	int tot_density;
-	int max_density;
+	int max_density; // tends towards 78, from 268 unphysical start condition. Average 55
 };
 
 globallycoherent RWStructuredBuffer<ParticlePosition> cloudPosition;
 globallycoherent RWStructuredBuffer<ParticlePyhsics> cloudPhysics;
 globallycoherent RWStructuredBuffer<ParticleData> cloudData;
+globallycoherent RWStructuredBuffer<ParticleNeighbors> cloudNeighbors;
 RWStructuredBuffer<Stats> statistics; 
 
 // some globals
@@ -84,14 +86,19 @@ void Sph(uint3 id : SV_DispatchThreadID)
 		d = cloudPosition[l].pos - p.pos;
 		r2 = dot(d,d); 
 		if (r2 < smoothingLength2) {
+			cloudNeighbors[id.x].nHit = nHit; 
+			if (nHit<99) {
+				cloudNeighbors[id.x].neighbor[nHit] = l; 
+			}
 			nHit +=1;
 			dsum +=pow((smoothingLength2-r2),3);
 		}
 	}	
-	if (nHit > statistics[0].max_density) {
-	   statistics[0].max_density = nHit;
-	}
-	InterlockedAdd(statistics[0].tot_density,nHit); // needs to be atomic.	
+
+//	if (nHit > statistics[0].max_density) {
+//	   statistics[0].max_density = nHit;
+//	}
+//	InterlockedAdd(statistics[0].tot_density,nHit); // needs to be atomic.	
 
 	dsum *= factor2;
 	cloudPhysics[id.x].d = dsum;
@@ -110,8 +117,9 @@ void Sph(uint3 id : SV_DispatchThreadID)
 
 	p = cloudPosition[id.x];
 	ParticlePyhsics pp = cloudPhysics[id.x];
-
-	for (uint j = 0; j < npts; ++j) {
+   
+	for (uint ni = 0; ni < min(99,cloudNeighbors[id.x].nHit) ; ni++) {
+		uint j = cloudNeighbors[id.x].neighbor[ni];
 		if (j == id.x) { // no measureable speed cost vs splitting the loop
 			continue;
 		}
@@ -171,6 +179,6 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	cloudPhysics[id.x].vel = v_n;
 
 
-	InterlockedAdd(statistics[0].thread_count,1); // needs to be atomic. 
+//	InterlockedAdd(statistics[0].thread_count,1); // needs to be atomic. 
 };
 
