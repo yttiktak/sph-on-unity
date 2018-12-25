@@ -9,6 +9,10 @@ but, but.. that adds N*Nneighbors^2 integer compare ops to reduce N^2 distance m
 
 At N = 10k and Nn = 100, add 10^4*(10^4 integer compare), remove 10^4*((10^4-10^2) distance).
 
+Nibbling at it. Buffer of size N*100 didnt crash. N apx 10000. Assigning neighbores each and every loop from distance test of all N didnt kill frame rate too much.
+Using assigned neighbors for the force compute loop didnt crash. Even when ignoring neighbors more than 99. 
+Merry Christmas!
+
 
 
 
