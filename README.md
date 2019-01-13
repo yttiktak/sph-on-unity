@@ -8,5 +8,6 @@ Added gravity, eg inverse square. Naive, no accounting for discreet steps. Borin
 Adding SPH.
 
 Runs on Unity2018 on Ubuntu (Bionic) and on Unity2018 Windows
+Trying various sorting ideas.
 
 
