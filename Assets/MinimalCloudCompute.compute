@@ -10,6 +10,7 @@ struct ParticlePyhsics
 	float3 force;
 	float d;
 	float p;
+	float m;
 };
 struct ParticleData
 {
@@ -17,17 +18,28 @@ struct ParticleData
 };
 
 // actually an array of 3 floats, in cpu land
+/**
 struct Stats
 {
 	int thread_count;
 	float max_density;
 	float min_density;
 };
+**/
+
+struct Body 
+{
+	int nParts;
+	float3 cog;
+	float3 torque;
+	float3 force;
+};
 
 globallycoherent RWStructuredBuffer<ParticlePosition> cloudPosition;
 globallycoherent RWStructuredBuffer<ParticlePyhsics> cloudPhysics;
 globallycoherent RWStructuredBuffer<ParticleData> cloudData;
-RWStructuredBuffer<Stats> statistics; 
+// RWStructuredBuffer<Stats> statistics; 
+RWStructuredBuffer<Body> body; 
 
 // some globals
 float particleRadius;
@@ -115,46 +127,74 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	}
 
 	v_fs *= particleViscosity;
-	g.y = -100000000000000000.0 * cloudPhysics[id.x].d;
+	g.y = -100000000000000000.0 * cloudPhysics[id.x].d * cloudPhysics[id.x].m;
 
 
 	float size = 12;
 	float repulse;
 	repulse = 1000000000000000000.0 * pp.d;
 	float3 force = 0;
+	static const float3 up = {0,100000000000.0,0};
 	// no measurable speed penalty here:
 	if (p.pos.x < -size) { 
 		force.x = -repulse * (p.pos.x + size);
-		cloudPhysics[id.x].vel *= 0.99;
+				cloudPhysics[id.x].m = 1.2;
+	//	cloudPhysics[id.x].vel *= 0.99;
 	} else if (p.pos.x > size) { 
 		force.x = -repulse * (p.pos.x - size);
-		cloudPhysics[id.x].vel *= 0.99;
+		cloudPhysics[id.x].m = 1.2;
+	//	cloudPhysics[id.x].vel *= 0.99;
 	}
+
+	if (length(p.pos.xz) < size * 0.5) {
+		cloudPhysics[id.x].m = 0.5;
+		force += cross(p.pos,up);
+	}
+
 	if (p.pos.y < -size) { 
-		force.y = -repulse * (p.pos.y + size);
-		cloudPhysics[id.x].vel *= 0.99;
+		force.y = - repulse * (p.pos.y + size);
+
+	//	cloudPhysics[id.x].vel *= 0.99;
 	} else if (p.pos.y > size) { 
 		force.y = -repulse * (p.pos.y - size);
-		cloudPhysics[id.x].vel *= 0.99;
+	//	cloudPhysics[id.x].vel *= 0.99;
 	}
 	if (p.pos.z < -size) { 
 		force.z = -repulse * (p.pos.z + size);
-		cloudPhysics[id.x].vel *= 0.99;
+		cloudPhysics[id.x].m = 1.2;
+	//	cloudPhysics[id.x].vel *= 0.99;
 	} else  if (p.pos.z > size) { 
 		force.z = -repulse * (p.pos.z - size);
-		cloudPhysics[id.x].vel *= 0.99;
+		cloudPhysics[id.x].m = 1.2;
+	//	cloudPhysics[id.x].vel *= 0.99;
 	}
 
-    cloudPhysics[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force);
+	if (id.x>npts-body[0].nParts) {
+		body[0].force += particleMass * factor1 * ( v_fs + p_fs + g + force) * cloudPhysics[id.x].m;
+		body[0].torque += cross(body[0].force,body[0].cog-p.pos);
+	} else {
+    	cloudPhysics[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force) * cloudPhysics[id.x].m;
+    }
 
-// BARRIER 2, NOW INTEGRATE
+// BARRIER 2, NOW INTEGRATE AND MOVE POSITIONS
 	AllMemoryBarrierWithGroupSync();
 
-	a = cloudPhysics[id.x].force / cloudPhysics[id.x].d;
-	float3 v_n = cloudPhysics[id.x].vel;
-	float3 p_n = cloudPosition[id.x].pos;
+	float3 v_n;
+	float3 p_n;
+	if (id.x>npts-body[0].nParts) { // this breaks!! should move body physics to game engine
+		a = body[0].force / (cloudPhysics[id.x].d * cloudPhysics[id.x].m * body[0].nParts);
+		v_n = 0; // cloudPhysics[id.x].vel;
+		p_n = cloudPosition[id.x].pos;
+		// return; // 
+	} else {
+
+		a = cloudPhysics[id.x].force / (cloudPhysics[id.x].d * cloudPhysics[id.x].m);
+		v_n = cloudPhysics[id.x].vel;
+		p_n = cloudPosition[id.x].pos;
+    }
 	v_n += a * time_step;
 	p_n += v_n * time_step;
+	
 
 	cloudPosition[id.x].pos = p_n;
 	cloudPhysics[id.x].vel = v_n;
@@ -163,3 +203,12 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	// InterlockedAdd(statistics[0].thread_count,1); // needs to be atomic. float or int or whatt?
 };
 
+/**
+struct Body 
+{
+	int nParts;
+	float3 cog;
+	float3 torque;
+	float3 force;
+};
+**/

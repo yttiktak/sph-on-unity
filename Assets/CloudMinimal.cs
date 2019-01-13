@@ -15,6 +15,7 @@ struct ParticlePhysics
 	public Vector3 force;//6
 	public float density;//7
 	public float pressure;//8
+	public float mass; //9
 }
 
 struct ParticleData
@@ -22,9 +23,17 @@ struct ParticleData
 	public Vector3 color;
 }
 		
+struct Body
+{
+	public int nParts;
+	public Vector3 cog;
+	public Vector3 torque;
+	public Vector3 force;
+}
 
 public class CloudMinimal : MonoBehaviour {
 
+	public MeshBody mobod;
 	public Material material;
     public ComputeShader minimalCloudCompute;
 	public ComputeShader legacyCloudCompute;
@@ -46,8 +55,9 @@ public class CloudMinimal : MonoBehaviour {
     int npts; 
 	public static ComputeBuffer positionBuffer; //3 floats
 	ComputeBuffer physicsBuffer;  //8 floats
-	ComputeBuffer dataBuffer;	  //3 floats
-	ComputeBuffer stats_buffer;
+	public static ComputeBuffer dataBuffer;	  //3 floats
+	public static ComputeBuffer bodyBuffer; //10 floats (1 int, 9 floats)
+//	ComputeBuffer stats_buffer;
 
 	int[] statistics;
 
@@ -61,9 +71,10 @@ public class CloudMinimal : MonoBehaviour {
 		maxRad = 10.0f;
 	
 		positionBuffer = new ComputeBuffer (npts, sizeof(float) * 3, ComputeBufferType.Default);
-		physicsBuffer = new ComputeBuffer(npts,sizeof(float)*8, ComputeBufferType.Default);
+		physicsBuffer = new ComputeBuffer(npts,sizeof(float)*9, ComputeBufferType.Default);
 		dataBuffer = new ComputeBuffer(npts,sizeof(float)*3, ComputeBufferType.Default);
-		stats_buffer = new ComputeBuffer (1, sizeof(float) * 3, ComputeBufferType.Default);
+		bodyBuffer = new ComputeBuffer (1, sizeof(float) * 10, ComputeBufferType.Default);
+//		stats_buffer = new ComputeBuffer (1, sizeof(float) * 3, ComputeBufferType.Default);
 
 		csidSPH = minimalCloudCompute.FindKernel ("Sph");
 		csidSmoothBall = legacyCloudCompute.FindKernel ("SmoothBall");
@@ -75,6 +86,7 @@ public class CloudMinimal : MonoBehaviour {
 		ParticlePosition[] cloudPosition = new ParticlePosition[npts];
 		ParticlePhysics[] cloudPhysics = new ParticlePhysics[npts];
 		ParticleData[] cloudData = new ParticleData[npts];
+		Body[] body = new Body[1];
 
 		for (uint i = 0; i < npts; ++i) {
 			cloudPosition [i] = new ParticlePosition ();
@@ -84,22 +96,23 @@ public class CloudMinimal : MonoBehaviour {
 			cloudPosition[i].position = new Vector3(rad * Mathf.Cos(phi), rad * Mathf.Sin(theta) * Mathf.Sin(phi), rad * Mathf.Cos(theta) * Mathf.Sin(phi));
 			cloudPhysics [i].velocity = new Vector3 (0, 0, 0); // 200000.0f *  new Vector3 (Random.Range (-1f, 1f), Random.Range (-1f, 1f), Random.Range (-1f, 1f));
 			cloudPhysics [i].force = new Vector3 (0,0,0); //(Random.Range (-1f, 1), Random.Range (-1f, 1f), Random.Range (-1f, 1f));
-			cloudData [i].color = new Vector3(0.0f,0.1f,0.1f);
-			cloudPhysics [i].density = 100;
+			cloudData [i].color = new Vector3(1.0f,0.2f,0.2f);
+			cloudPhysics [i].density = 0;
 			cloudPhysics [i].pressure = 0;
+			cloudPhysics [i].mass = 1.0f;
 		}
-		cloudPhysics [0].density = 90; // to see if it floats 
-		cloudPhysics [9].density = 110; // and if it sinks!
 
 		statistics = new int[3];
 		statistics[0]= 0;
 		statistics[1] = 0;
 		statistics[2] = 100000;
-		stats_buffer.SetData(statistics);
+//		stats_buffer.SetData(statistics);
 
 		positionBuffer.SetData (cloudPosition);
 		physicsBuffer.SetData (cloudPhysics);
 		dataBuffer.SetData (cloudData);
+
+
 
 		int cloudID = Shader.PropertyToID("cloudPosition");
 		minimalCloudCompute.SetBuffer(csidSPH, cloudID, positionBuffer);
@@ -113,12 +126,18 @@ public class CloudMinimal : MonoBehaviour {
 		int dataID = Shader.PropertyToID("cloudData");
 		minimalCloudCompute.SetBuffer(csidSPH, dataID, dataBuffer);
 		Shader.SetGlobalBuffer(cloudID, dataBuffer);
+		Graphics.SetRandomWriteTarget(2, dataBuffer,true);
 
-		int indexStats = Shader.PropertyToID("statistics");
-		minimalCloudCompute.SetBuffer(csidSPH, indexStats, stats_buffer);
+	//	int indexStats = Shader.PropertyToID("statistics");
+	//	minimalCloudCompute.SetBuffer(csidSPH, indexStats, stats_buffer);
 
 		OnValidate (); // set global shader values
 
+		mobod.SendMessage ("SetVertsToCloud");
+		body [0].cog = mobod.cog;
+		body [0].nParts = mobod.nVerts;
+		bodyBuffer.SetData (body);
+		minimalCloudCompute.SetBuffer(csidSPH, "body", bodyBuffer);
     }
 	
 	void OnValidate() {
@@ -144,7 +163,7 @@ public class CloudMinimal : MonoBehaviour {
 		Graphics.DrawProcedural (MeshTopology.Points, npts, 1); // does not speed up it not drawn!
 
 		statistics[0] = 0;
-		stats_buffer.SetData (statistics);
+//		stats_buffer.SetData (statistics);
 		minimalCloudCompute.Dispatch (csidSPH, nthr, 1, 1);
 
     }
@@ -153,6 +172,6 @@ public class CloudMinimal : MonoBehaviour {
 		positionBuffer.Release ();
 		physicsBuffer.Release ();
 		dataBuffer.Release();
-		stats_buffer.Release ();
+//		stats_buffer.Release ();
 	}
 }

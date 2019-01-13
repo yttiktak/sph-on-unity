@@ -22,6 +22,11 @@
 				float3 pos;
 			};
 
+			struct ParticleData
+			{
+				float3 color;
+			};
+
 			struct appdata
 			{
 				float4 vertex : POSITION;
@@ -36,13 +41,14 @@
 
 
 			RWStructuredBuffer<ParticlePos> cloudPosition : register(u1);
+			RWStructuredBuffer<ParticleData> cloudData : register(u2);
 
 			v2f vert (uint id : SV_VertexID)
 			{
 				v2f o;
 				ParticlePos p = cloudPosition[id];
 				o.vertex = UnityObjectToClipPos(p.pos);
-				o.color = 1; // cloud[id].color;
+				o.color = cloudData[id].color;
 				return o;
 			}
 			
