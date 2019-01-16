@@ -25,10 +25,10 @@ struct ParticleData
 		
 struct Body
 {
-	public int nParts;
 	public Vector3 cog;
 	public Vector3 torque;
 	public Vector3 force;
+	public int nParts;
 }
 
 public class CloudMinimal : MonoBehaviour {

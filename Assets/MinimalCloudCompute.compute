@@ -29,10 +29,10 @@ struct Stats
 
 struct Body 
 {
-	int nParts;
 	float3 cog;
 	float3 torque;
 	float3 force;
+	int nParts;
 };
 
 globallycoherent RWStructuredBuffer<ParticlePosition> cloudPosition;
@@ -169,23 +169,35 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	//	cloudPhysics[id.x].vel *= 0.99;
 	}
 
+
+	/**
 	if (id.x>npts-body[0].nParts) {
-		body[0].force += particleMass * factor1 * ( v_fs + p_fs + g + force) * cloudPhysics[id.x].m;
-		body[0].torque += cross(body[0].force,body[0].cog-p.pos);
+	    v_n = particleMass * factor1 * ( v_fs + p_fs + g + force) * cloudPhysics[id.x].m;
+	    p_n = cross(body[0].force,body[0].cog-p.pos);	
+	   // InterlockedAddFloat(body[0].force.x,v_n.x); // does not exist, this opp
+	  //  InterlockedAdd(body[0].force.y,v_n.y);
+	  //  InterlockedAdd(body[0].force.z,v_n.z);
+	  //  InterlockedAdd(body[0].torque.x,p_n.x);
+	  //  InterlockedAdd(body[0].torque.y,p_n.y);
+	  //  InterlockedAddFloat(body[0].torque.z,p_n.z);
 	} else {
+	**/
+
     	cloudPhysics[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force) * cloudPhysics[id.x].m;
-    }
+
+   // }
 
 // BARRIER 2, NOW INTEGRATE AND MOVE POSITIONS
 	AllMemoryBarrierWithGroupSync();
 
 	float3 v_n;
 	float3 p_n;
-	if (id.x>npts-body[0].nParts) { // this breaks!! should move body physics to game engine
-		a = body[0].force / (cloudPhysics[id.x].d * cloudPhysics[id.x].m * body[0].nParts);
-		v_n = 0; // cloudPhysics[id.x].vel;
-		p_n = cloudPosition[id.x].pos;
-		// return; // 
+
+	if (id.x>npts-body[0].nParts) { // this breaks!! Move body physics to game engine
+		//a = body[0].force / (cloudPhysics[id.x].d * cloudPhysics[id.x].m * body[0].nParts);
+		//v_n = 0; // cloudPhysics[id.x].vel;
+		//p_n = cloudPosition[id.x].pos;
+		return; // 
 	} else {
 
 		a = cloudPhysics[id.x].force / (cloudPhysics[id.x].d * cloudPhysics[id.x].m);
@@ -199,8 +211,9 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	cloudPosition[id.x].pos = p_n;
 	cloudPhysics[id.x].vel = v_n;
 
-
-	// InterlockedAdd(statistics[0].thread_count,1); // needs to be atomic. float or int or whatt?
+	// CRASH TEST DUMMY
+	// InterlockedAdd(body[0].nParts,1); // needs to be atomic. float or int or whatt?
+	// becomes AtomicIAdd 891 192 32 192
 };
 
 /**
