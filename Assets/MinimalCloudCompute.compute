@@ -1,4 +1,6 @@
 ﻿#pragma kernel Sph
+#pragma kernel BodyForces
+
 // 11.5 ms 1024
 struct ParticlePosition
 {
@@ -116,6 +118,13 @@ void Sph(uint3 id : SV_DispatchThreadID)
 		if (j == id.x) { // no measureable speed cost vs splitting the loop
 			continue;
 		}
+		if (cloudPhysics[j].d == 0) {
+			continue;
+		}
+		// what the heck. 2???
+		if (cloudPhysics[j].d == 2) {
+			continue;
+		}
 		d = (cloudPosition[j].pos - p.pos);
 		r2 = dot(d,d);
 		if (r2<smoothingLength2)
@@ -169,59 +178,62 @@ void Sph(uint3 id : SV_DispatchThreadID)
 	//	cloudPhysics[id.x].vel *= 0.99;
 	}
 
+	// NOT THE RIGHT PLACE FOR GRAVITY, AS A FORCE. MOVE IT DOWN TO ACCELERATION!!
+    cloudPhysics[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force) * cloudPhysics[id.x].m;
 
-	/**
-	if (id.x>npts-body[0].nParts) {
-	    v_n = particleMass * factor1 * ( v_fs + p_fs + g + force) * cloudPhysics[id.x].m;
-	    p_n = cross(body[0].force,body[0].cog-p.pos);	
-	   // InterlockedAddFloat(body[0].force.x,v_n.x); // does not exist, this opp
-	  //  InterlockedAdd(body[0].force.y,v_n.y);
-	  //  InterlockedAdd(body[0].force.z,v_n.z);
-	  //  InterlockedAdd(body[0].torque.x,p_n.x);
-	  //  InterlockedAdd(body[0].torque.y,p_n.y);
-	  //  InterlockedAddFloat(body[0].torque.z,p_n.z);
-	} else {
-	**/
-
-    	cloudPhysics[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force) * cloudPhysics[id.x].m;
-
-   // }
 
 // BARRIER 2, NOW INTEGRATE AND MOVE POSITIONS
 	AllMemoryBarrierWithGroupSync();
 
 	float3 v_n;
 	float3 p_n;
+	float nope;
 
-	if (id.x>npts-body[0].nParts) { // this breaks!! Move body physics to game engine
-		//a = body[0].force / (cloudPhysics[id.x].d * cloudPhysics[id.x].m * body[0].nParts);
-		//v_n = 0; // cloudPhysics[id.x].vel;
-		//p_n = cloudPosition[id.x].pos;
-		return; // 
+	if (id.x>npts-body[0].nParts) { 
+		nope = 0.0;
 	} else {
+		nope = 1.0;
+	}
 
 		a = cloudPhysics[id.x].force / (cloudPhysics[id.x].d * cloudPhysics[id.x].m);
 		v_n = cloudPhysics[id.x].vel;
 		p_n = cloudPosition[id.x].pos;
-    }
-	v_n += a * time_step;
-	p_n += v_n * time_step;
+    
+		v_n += a * time_step * nope;
+		p_n += v_n * time_step * nope;
 	
+		cloudPhysics[id.x].vel = v_n;
+		cloudPosition[id.x].pos = p_n;
 
-	cloudPosition[id.x].pos = p_n;
-	cloudPhysics[id.x].vel = v_n;
 
-	// CRASH TEST DUMMY
-	// InterlockedAdd(body[0].nParts,1); // needs to be atomic. float or int or whatt?
-	// becomes AtomicIAdd 891 192 32 192
+
 };
+
+// will this work? Run single thread. Point is to keep memory in GPU
+// note it must be called with 1
+[numthreads(1,1,1)]
+void BodyForces(uint3 id : SV_DispatchThreadID)
+{
+	uint npts;
+	uint stride;
+	uint startId;
+	cloudPosition.GetDimensions(npts,stride);
+	startId = npts-body[0].nParts;
+	body[0].force = cloudPhysics[npts-1].force; //TEST
+	body[0].torque = cross(cloudPhysics[npts-1].force,body[0].cog-cloudPosition[npts-1].pos);
+	for (uint i=npts-2; i>=startId; i--) {
+	//	body[0].force += cloudPhysics[i].force;
+	//	body[0].torque += cross(cloudPhysics[i].force,body[0].cog-cloudPosition[i].pos);
+	}
+
+}
 
 /**
 struct Body 
 {
-	int nParts;
 	float3 cog;
 	float3 torque;
 	float3 force;
+	int nParts;
 };
 **/
