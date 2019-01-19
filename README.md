@@ -1,4 +1,6 @@
 # sph-on-unity
+![alt text](http://www.repeatingshadow.com/Video/SPHC.gif "screen cap")
+
 Getting Smoothed Particle Hydrodynamics running on computeShaders in Unity3d
 
 Started with interesting mistake, resulting in a power law instead of inverse square gravity.
