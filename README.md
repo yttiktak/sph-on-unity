@@ -1,5 +1,4 @@
 # sph-on-unity
-![screen cap](http://www.repeatingshadow.com/Video/SPHC.gif)
 
 Getting Smoothed Particle Hydrodynamics running on computeShaders in Unity3d
 
