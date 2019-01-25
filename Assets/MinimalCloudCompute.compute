@@ -1,4 +1,9 @@
 ﻿#pragma kernel Sph
+#pragma kernel SphDensityAll
+#pragma kernel SphDensityNeighbors
+#pragma kernel SphPhysicsIntegrate
+
+
 // Measure number of particles in an smoothing_length sphere
 struct ParticlePosition
 {
@@ -61,6 +66,178 @@ float time_step;
 // Daniel J. Price
 // Smoothed Particle Hydrodynamics and Magnetohydrodynamics
 ***/ 
+
+
+[numthreads(1024, 1, 1)]
+void SphDensityAll(uint3 id : SV_DispatchThreadID)
+{
+	uint npts;
+	uint stride;
+	cloudPosition.GetDimensions(npts,stride);
+
+	float3 a = 0;
+	float3 d = 0;
+	float3 d2;
+	float r;
+	float r2;
+	float factor2 = particleMass * 315.0 / ( 64.0*PI_FLOAT*smoothingLength9);
+	float dsum = 0;
+	int nHit;
+
+	ParticlePosition p = cloudPosition[id.x];
+
+	nHit = 0;
+	for (uint l = 0; l < npts; ++l) {
+		d = cloudPosition[l].pos - p.pos;
+		r2 = dot(d,d); 
+		if (r2 < smoothingLength2) {
+			cloudNeighbors[id.x].nHit = nHit; 
+			if (nHit<99) {
+				cloudNeighbors[id.x].neighbor[nHit] = l; 
+			}
+			nHit +=1;
+			dsum +=pow((smoothingLength2-r2),3);
+		}
+	}	
+
+	if (nHit > statistics[0].max_density) {
+	   statistics[0].max_density = nHit;
+	}
+	InterlockedAdd(statistics[0].tot_density,nHit); // needs to be atomic.	
+
+	dsum *= factor2;
+	cloudPhysics[id.x].d = dsum;
+	float densityDelta = dsum - particleRestDensity;
+
+	cloudPhysics[id.x].p =  max(particleStiffness * densityDelta, 0.f);
+}
+
+[numthreads(1024, 1, 1)]
+void SphDensityNeighbors(uint3 id : SV_DispatchThreadID)
+{
+	uint npts;
+	uint stride;
+	cloudPosition.GetDimensions(npts,stride);
+
+	float3 a = 0;
+	float3 d = 0;
+	float3 d2;
+	float r;
+	float r2;
+	float factor2 = particleMass * 315.0 / ( 64.0*PI_FLOAT*smoothingLength9);
+	float dsum = 0;
+	int nHit;
+
+	ParticlePosition p = cloudPosition[id.x];
+
+	nHit = cloudNeighbors[id.x].nHit;
+	for (uint ni = 0; ni < min(99,cloudNeighbors[id.x].nHit) ; ni++) {
+		uint j = cloudNeighbors[id.x].neighbor[ni];
+		d = cloudPosition[j].pos - p.pos;
+		r2 = dot(d,d); 
+		if (r2 < smoothingLength2) {
+			dsum +=pow((smoothingLength2-r2),3);
+		} else { // particle previously in sl has moved out. Must remove it from neighbors somehow..
+			// MAYBE KEEP AN ARRAY OF ESCAPES? MAYBE TAG UPPER BITS OF cloudNeighbors[id.x]?
+		}
+		// NOW CHECK THE NEIGHBORS' NEIGHBORS FOR PARTICLES MOVED INTO RANGE
+		for (uint nni = 0; nni < min(99,cloudNeighbors[ni].nHit); nni ++) {
+			uint k = cloudNeighbors[ni].neighbor[nni];
+			// GAHHHHHHH have I looked at this particle already orrrr nooott??
+		}
+	}	
+
+	dsum *= factor2;
+	cloudPhysics[id.x].d = dsum;
+	float densityDelta = dsum - particleRestDensity;
+	cloudPhysics[id.x].p =  max(particleStiffness * densityDelta, 0.f);
+}
+
+[numthreads(1024, 1, 1)]
+void SphPhysicsIntegrate(uint3 id : SV_DispatchThreadID)
+{
+	uint npts;
+	uint stride;
+	cloudPosition.GetDimensions(npts,stride);
+
+	float3 a = 0;
+	float3 d = 0;
+	float3 d2;
+	float r;
+	float r2;
+	float factor2 = particleMass * 315.0 / ( 64.0*PI_FLOAT*smoothingLength9);
+	float dsum = 0;
+	int nHit;
+
+	ParticlePosition p = cloudPosition[id.x];
+	float factor1;
+	float3 p_fs = 0;
+	float3 v_fs = 0;
+	float3 g = 0;
+	factor1 = 45.0 / (PI_FLOAT * smoothingLength6);
+
+	p = cloudPosition[id.x];
+	ParticlePyhsics pp = cloudPhysics[id.x];
+   
+	for (uint ni = 0; ni < min(99,cloudNeighbors[id.x].nHit) ; ni++) {
+		uint j = cloudNeighbors[id.x].neighbor[ni];
+		if (j == id.x) { 
+			continue;
+		}
+		d = (cloudPosition[j].pos - p.pos);
+		r2 = dot(d,d);
+		if (r2<smoothingLength2)
+		{
+			r = sqrt(r2); 
+			p_fs -= (pp.p + cloudPhysics[j].p) / (2.0 - cloudPhysics[j].d) *  pow(smoothingLength - r, 2) * normalize(d);
+			v_fs += (cloudPhysics[j].vel - pp.vel)/cloudPhysics[j].d *  (smoothingLength -r);
+		}
+	}
+	v_fs *= particleViscosity;
+	g.y = -100000000000000000.0 * cloudPhysics[id.x].d;
+
+	float size = 12;
+	float repulse;
+	repulse = 1000000000000000000.0 * pp.d;
+	float3 force = 0;
+	// no measurable speed penalty here:
+	if (p.pos.x < -size) { 
+		force.x = -repulse * (p.pos.x + size);
+		cloudPhysics[id.x].vel *= 0.99;
+	} else if (p.pos.x > size) { 
+		force.x = -repulse * (p.pos.x - size);
+		cloudPhysics[id.x].vel *= 0.99;
+	}
+	if (p.pos.y < -size) { 
+		force.y = -repulse * (p.pos.y + size);
+		cloudPhysics[id.x].vel *= 0.99;
+	} else if (p.pos.y > size) { 
+		force.y = -repulse * (p.pos.y - size);
+		cloudPhysics[id.x].vel *= 0.99;
+	}
+	if (p.pos.z < -size) { 
+		force.z = -repulse * (p.pos.z + size);
+		cloudPhysics[id.x].vel *= 0.99;
+	} else  if (p.pos.z > size) { 
+		force.z = -repulse * (p.pos.z - size);
+		cloudPhysics[id.x].vel *= 0.99;
+	}
+
+    cloudPhysics[id.x].force = particleMass * factor1 * ( v_fs + p_fs + g + force);
+
+    // BARRIER 2, NOW INTEGRATE
+	AllMemoryBarrierWithGroupSync();
+
+	a = cloudPhysics[id.x].force / cloudPhysics[id.x].d;
+	float3 v_n = cloudPhysics[id.x].vel;
+	float3 p_n = cloudPosition[id.x].pos;
+	v_n += a * time_step;
+	p_n += v_n * time_step;
+
+	cloudPosition[id.x].pos = p_n;
+	cloudPhysics[id.x].vel = v_n;
+}
+
 
 
 [numthreads(1024, 1, 1)]
