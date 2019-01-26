@@ -48,6 +48,7 @@ public class CloudMinimal : MonoBehaviour {
 	int csidSphDensityAll;
 	int csidSphDensityNeighbors;
 	int csidSphPhysicsIntegrate;
+	int csidSphNeighCull;
 	/**
 	#pragma kernel Sph
 	#pragma kernel SphDensityAll
@@ -77,9 +78,7 @@ public class CloudMinimal : MonoBehaviour {
 	
 		csidSPH = minimalCloudCompute.FindKernel ("Sph");
 		csidSmoothBall = legacyCloudCompute.FindKernel ("SmoothBall");
-		csidSphDensityAll = minimalCloudCompute.FindKernel ("SphDensityAll");
-		csidSphDensityNeighbors = minimalCloudCompute.FindKernel ("SphDensityNeighbors");
-		csidSphPhysicsIntegrate = minimalCloudCompute.FindKernel ("SphPhysicsIntegrate");
+		csidSphNeighCull = minimalCloudCompute.FindKernel ("SphNeighCull");
 
 		positionBuffer = new ComputeBuffer (npts, sizeof(float) * 3, ComputeBufferType.Default);
 		physicsBuffer = new ComputeBuffer(npts,sizeof(float)*8, ComputeBufferType.Default);
@@ -92,9 +91,8 @@ public class CloudMinimal : MonoBehaviour {
 		}
 		neighbors_buffer.SetData (fatNothings);
 		minimalCloudCompute.SetBuffer (csidSPH, "cloudNeighbors", neighbors_buffer);
-		minimalCloudCompute.SetBuffer (csidSphDensityAll, "cloudNeighbors", neighbors_buffer);
-		minimalCloudCompute.SetBuffer (csidSphPhysicsIntegrate, "cloudNeighbors", neighbors_buffer);
-
+		minimalCloudCompute.SetBuffer (csidSphNeighCull, "cloudNeighbors", neighbors_buffer); // and newCloudNeighbors
+		minimalCloudCompute.SetBuffer (csidSphNeighCull, "newCloudNeighbors", neighbors_buffer); 
 
 
 		minimalCloudCompute.GetKernelThreadGroupSizes (csidSPH, out ngx, out ngy,out  ngz); // just trust the same in other kernels
@@ -131,13 +129,13 @@ public class CloudMinimal : MonoBehaviour {
 
 		int cloudID = Shader.PropertyToID("cloudPosition");
 		minimalCloudCompute.SetBuffer(csidSPH, cloudID, positionBuffer);
+		minimalCloudCompute.SetBuffer(csidSphNeighCull, cloudID, positionBuffer);
 		Shader.SetGlobalBuffer(cloudID, positionBuffer);
 		Graphics.SetRandomWriteTarget(1, positionBuffer,true);
 
 		int physID = Shader.PropertyToID("cloudPhysics");
 		minimalCloudCompute.SetBuffer(csidSPH, physID, physicsBuffer);
-		minimalCloudCompute.SetBuffer(csidSphDensityAll, physID, physicsBuffer);
-		minimalCloudCompute.SetBuffer(csidSphPhysicsIntegrate, physID, physicsBuffer);
+		minimalCloudCompute.SetBuffer(csidSphNeighCull, physID, physicsBuffer);
 		Shader.SetGlobalBuffer(cloudID, physicsBuffer);
 
 		int dataID = Shader.PropertyToID("cloudData");
@@ -146,8 +144,7 @@ public class CloudMinimal : MonoBehaviour {
 
 		int indexStats = Shader.PropertyToID("statistics");
 		minimalCloudCompute.SetBuffer(csidSPH, indexStats, stats_buffer);
-		minimalCloudCompute.SetBuffer(csidSphPhysicsIntegrate, indexStats, stats_buffer);
-		minimalCloudCompute.SetBuffer(csidSphDensityAll, indexStats, stats_buffer);
+		minimalCloudCompute.SetBuffer(csidSphNeighCull, indexStats, stats_buffer);
 
 		OnValidate (); // set global shader values
 
@@ -180,10 +177,9 @@ public class CloudMinimal : MonoBehaviour {
 		statistics [2] = 0;
 	//	stats_buffer.SetData (statistics);
 		// minimalCloudCompute.Dispatch (csidSPH, nthr, 1, 1);
-		minimalCloudCompute.Dispatch (csidSphDensityAll, nthr, 1, 1);
-		minimalCloudCompute.Dispatch (csidSphPhysicsIntegrate, nthr, 1, 1); // nope, not yet
+		minimalCloudCompute.Dispatch(csidSphNeighCull,nthr,1,1);
 	//	stats_buffer.GetData (statistics);
-	//	Debug.Log ("avg hits= " + statistics[1] / statistics[0] + " nmax=" + statistics [2] );
+	//	Debug.Log ("stat0= " + statistics[0] + " " + statistics[1] + " " + statistics [2] );
     }
 
 	void OnDestroy(){
